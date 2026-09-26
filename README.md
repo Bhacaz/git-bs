@@ -5,6 +5,12 @@ based on [git-branch-select.sh](https://gist.github.com/Bhacaz/c00f7174918c00b5a
 The picker is built into the executable; **fzf and Bash are not required**.
 Git must be installed and available on `PATH`.
 
+## Demo
+
+[![Animated demo of fuzzy branch search, commit previews, and checkout](docs/demo.gif)](docs/demo.mp4)
+
+Click the preview to watch the video.
+
 ## Install with Homebrew
 
 ```sh
