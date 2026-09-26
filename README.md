@@ -12,8 +12,12 @@ brew install Bhacaz/tap/git-bs
 git bs
 ```
 
-The formula builds the executable from the tagged Rust source. Homebrew installs
-Rust for the build and Git for runtime use. You do not need Rust after installing.
+The formula downloads a compiled executable for macOS (Apple Silicon or Intel)
+or Linux (x86-64 or ARM64). It installs Git as needed, then sets the global Git
+alias `bs` to the executable in Homebrew's stable `opt` path. Git reads aliases
+on every invocation, so `git bs` works immediately without sourcing a shell
+configuration file. The install replaces any existing global `alias.bs` value.
+To remove that alias later, run `git config --global --unset alias.bs`.
 
 ## Build and run
 
@@ -27,7 +31,8 @@ cargo build --release --locked
 
 Run the executable from any directory inside a Git repository. A Linux build
 made in this workspace is also available as `dist/git-bs`; it is not stored in
-the source repository. Tagged releases include a Linux x86-64 executable.
+the source repository. Tagged releases include binaries for the four platforms
+listed above.
 
 To install from source:
 
