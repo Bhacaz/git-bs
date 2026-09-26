@@ -86,9 +86,11 @@ Cargo on the destination platform to build for another system.
 
 ## Behavior
 
-- Lists local branches, newest committer date first, with relative ages.
+- Lists local branches by last visit in this worktree, with the current branch
+  first. Branches with no recorded visit follow by newest commit. Relative ages
+  still describe the most recent commit on each branch.
 - Marks the current branch with a green `*`.
-- Searches branch names while retaining their commit-date order.
+- Searches branch names while retaining their visit order.
 - Highlights the letters that match the search query in each branch name.
 - Shows a graph of the selected branch's last 15 commits.
 - Checks out the selected branch using Git's usual worktree protections.

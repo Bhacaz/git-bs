@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     io,
     path::PathBuf,
     process::{Command, ExitStatus},
@@ -51,11 +52,12 @@ impl Repository {
     pub fn branches(&self) -> io::Result<Vec<Branch>> {
         let output = self.output(&[
             "for-each-ref",
+            "--sort=refname",
             "--sort=-committerdate",
             "--format=%(refname)%00%(committerdate:relative)%00%(HEAD)",
             "refs/heads/",
         ])?;
-        output
+        let mut branches: Vec<Branch> = output
             .lines()
             .map(|line| {
                 let mut fields = line.split('\0');
@@ -71,7 +73,16 @@ impl Repository {
                     _ => Err(io::Error::other("Unexpected branch data from Git.")),
                 }
             })
-            .collect()
+            .collect::<io::Result<_>>()?;
+        if branches.len() > 1 {
+            // HEAD's reflog belongs to this worktree and records branch switches.
+            // Missing or disabled reflogs leave branches in commit-date order.
+            let reflog = self
+                .output(&["reflog", "show", "--no-color", "--format=%gs", "HEAD"])
+                .unwrap_or_default();
+            order_by_last_visit(&mut branches, &reflog);
+        }
+        Ok(branches)
     }
 
     pub fn preview(&self, branch: &Branch) -> io::Result<String> {
@@ -100,6 +111,55 @@ impl Repository {
             .args(["checkout", "--no-guess", &branch.name, "--"])
             .status()
     }
+}
+
+fn order_by_last_visit(branches: &mut [Branch], reflog: &str) {
+    let mut ranks = HashMap::new();
+    for branch in branches.iter().filter(|branch| branch.current) {
+        ranks.insert(branch.name.clone(), ranks.len());
+    }
+    let mut names: Vec<_> = branches
+        .iter()
+        .map(|branch| {
+            (
+                branch.name.clone(),
+                format!("{} to ", branch.name),
+                format!(" to {}", branch.name),
+            )
+        })
+        .collect();
+    // A branch name can itself contain " to ". Prefer the longest valid name.
+    names.sort_by_key(|(name, _, _)| std::cmp::Reverse(name.len()));
+    for message in reflog.lines() {
+        if ranks.len() == branches.len() {
+            break;
+        }
+        let Some(switch) = message.strip_prefix("checkout: moving from ") else {
+            continue;
+        };
+        // The destination was visited at the switch; the source immediately
+        // preceded it. Match against current local names so detached commits
+        // and deleted branches do not enter the picker.
+        let destination = names.iter().find(|(_, _, suffix)| switch.ends_with(suffix));
+        if let Some((name, _, _)) = destination {
+            let next = ranks.len();
+            ranks.entry(name.clone()).or_insert(next);
+        }
+        let source = names
+            .iter()
+            .find(|(_, prefix, _)| switch.starts_with(prefix));
+        if let Some((name, _, _)) = source {
+            let next = ranks.len();
+            ranks.entry(name.clone()).or_insert(next);
+        }
+    }
+    // Stable sorting keeps Git's commit-date order for branches never visited.
+    branches.sort_by(|left, right| {
+        ranks
+            .get(&left.name)
+            .unwrap_or(&usize::MAX)
+            .cmp(ranks.get(&right.name).unwrap_or(&usize::MAX))
+    });
 }
 
 #[cfg(test)]
@@ -197,5 +257,50 @@ mod tests {
         assert!(preview.contains("commit-19"));
         assert!(preview.contains("commit-05"));
         assert!(!preview.contains("commit-04"));
+    }
+
+    #[test]
+    fn visit_order_handles_branch_names_with_to_and_missing_reflog() {
+        let names = [
+            "unvisited-new",
+            "main",
+            "topic to test",
+            "test",
+            "unvisited-old",
+        ];
+        let make_branches = || {
+            names
+                .iter()
+                .map(|name| Branch {
+                    name: (*name).into(),
+                    age: String::new(),
+                    current: *name == "topic to test",
+                })
+                .collect::<Vec<_>>()
+        };
+        let mut branches = make_branches();
+        order_by_last_visit(
+            &mut branches,
+            "checkout: moving from main to topic to test\n",
+        );
+        assert_eq!(
+            branches
+                .iter()
+                .map(|branch| branch.name.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "topic to test",
+                "main",
+                "unvisited-new",
+                "test",
+                "unvisited-old"
+            ]
+        );
+
+        let mut branches = make_branches();
+        order_by_last_visit(&mut branches, "");
+        assert_eq!(branches[0].name, "topic to test");
+        assert_eq!(branches[1].name, "unvisited-new");
+        assert_eq!(branches[2].name, "main");
     }
 }

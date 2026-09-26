@@ -53,7 +53,7 @@ impl Picker {
 }
 
 // Ordered subsequence matching, with smart case and space-separated AND terms.
-// Filtering preserves the original commit-date ordering, like fzf --no-sort.
+// Filtering preserves visit order and the commit-date fallback.
 fn match_positions(name: &str, query: &str) -> Option<Vec<usize>> {
     let sensitive = query.chars().any(char::is_uppercase);
     let mut characters = Vec::new();

@@ -27,7 +27,8 @@ Keys:
   Backspace to erase; Ctrl-U to clear the search
   Enter to checkout; Esc or Ctrl-C to cancel
 
-Branches stay sorted by most recent commit. Search uses fuzzy subsequences,
+Branches are sorted by last visit, then newest commit for unvisited branches.
+Search uses fuzzy subsequences,
 smart case, and space-separated AND terms. Requires Git, but not fzf.
 ";
 

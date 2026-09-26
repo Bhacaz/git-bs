@@ -87,9 +87,9 @@ with tempfile.TemporaryDirectory(prefix="git-bs-smoke-") as directory:
         assert git(directory, "branch", "--show-current") == "feature/login"
     print("PASS: Escape, Ctrl-C, and Enter with no matches do not change branches")
 
-    # End selects main (the second alphabetical ref when commit timestamps tie).
     # Use Ctrl-U to clear an initial query and Down to reach the second result.
-    lines = git(directory, "for-each-ref", "--sort=-committerdate", "--format=%(refname:short)", "refs/heads/").splitlines()
+    lines = [line[2:].split("  (", 1)[0].rstrip() for line in subprocess.check_output(
+        [BINARY, "--list"], cwd=directory, text=True).splitlines()]
     git(directory, "checkout", lines[0])
     code, output = interact(directory, b"\x15\x1b[B\r", ["--query", "nonexistent"])
     assert code == 0 and git(directory, "branch", "--show-current") == lines[1]
