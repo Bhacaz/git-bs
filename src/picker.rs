@@ -3,8 +3,14 @@ use crate::git::Branch;
 pub struct Picker {
     pub branches: Vec<Branch>,
     pub query: String,
-    pub filtered: Vec<usize>,
+    pub filtered: Vec<BranchMatch>,
     pub selected: usize,
+}
+
+pub struct BranchMatch {
+    pub index: usize,
+    // Byte offsets into the original branch name, always sorted and unique.
+    pub positions: Vec<usize>,
 }
 
 impl Picker {
@@ -24,8 +30,10 @@ impl Picker {
             .branches
             .iter()
             .enumerate()
-            .filter(|(_, branch)| fuzzy_match(&branch.name, &self.query))
-            .map(|(index, _)| index)
+            .filter_map(|(index, branch)| {
+                match_positions(&branch.name, &self.query)
+                    .map(|positions| BranchMatch { index, positions })
+            })
             .collect();
         self.selected = 0;
     }
@@ -40,29 +48,43 @@ impl Picker {
     pub fn selected_branch(&self) -> Option<&Branch> {
         self.filtered
             .get(self.selected)
-            .map(|&index| &self.branches[index])
+            .map(|branch_match| &self.branches[branch_match.index])
     }
 }
 
 // Ordered subsequence matching, with smart case and space-separated AND terms.
 // Filtering preserves the original commit-date ordering, like fzf --no-sort.
-fn fuzzy_match(name: &str, query: &str) -> bool {
+fn match_positions(name: &str, query: &str) -> Option<Vec<usize>> {
     let sensitive = query.chars().any(char::is_uppercase);
-    let name = if sensitive {
-        name.to_string()
-    } else {
-        name.to_lowercase()
-    };
+    let mut characters = Vec::new();
+    for (byte, character) in name.char_indices() {
+        if sensitive {
+            characters.push((character, byte));
+        } else {
+            characters.extend(character.to_lowercase().map(|lower| (lower, byte)));
+        }
+    }
     let query = if sensitive {
         query.to_string()
     } else {
         query.to_lowercase()
     };
-    query.split_whitespace().all(|term| {
-        let mut characters = name.chars();
-        term.chars()
-            .all(|needle| characters.by_ref().any(|c| c == needle))
-    })
+    let mut positions = Vec::new();
+    for term in query.split_whitespace() {
+        let mut next = 0;
+        for needle in term.chars() {
+            let found = characters
+                .iter()
+                .enumerate()
+                .skip(next)
+                .find(|(_, (character, _))| *character == needle)?;
+            positions.push(found.1.1);
+            next = found.0 + 1;
+        }
+    }
+    positions.sort_unstable();
+    positions.dedup();
+    Some(positions)
 }
 
 #[cfg(test)]
@@ -71,12 +93,27 @@ mod tests {
 
     #[test]
     fn fuzzy_search_smart_case_unicode_and_terms() {
-        assert!(fuzzy_match("feature/Add-Été", "faé"));
-        assert!(fuzzy_match("feature/Add-Été", "été feat"));
-        assert!(fuzzy_match("feature/Add-Été", "AÉ"));
-        assert!(!fuzzy_match("feature/add-été", "AÉ"));
-        assert!(!fuzzy_match("main", "missing"));
-        assert!(fuzzy_match("main", ""));
+        assert!(match_positions("feature/Add-Été", "faé").is_some());
+        assert!(match_positions("feature/Add-Été", "été feat").is_some());
+        assert!(match_positions("feature/Add-Été", "AÉ").is_some());
+        assert!(match_positions("feature/add-été", "AÉ").is_none());
+        assert!(match_positions("main", "missing").is_none());
+        assert_eq!(match_positions("main", ""), Some(vec![]));
+    }
+
+    #[test]
+    fn positions_identify_original_characters_for_fuzzy_terms_and_unicode() {
+        assert_eq!(
+            match_positions("feature/login", "ftlg"),
+            Some(vec![0, 3, 8, 10])
+        );
+        assert_eq!(match_positions("éclair/été", "éé"), Some(vec![0, 8]));
+        assert_eq!(
+            match_positions("main/feature", "feat main"),
+            Some(vec![0, 1, 2, 3, 5, 6, 7, 8])
+        );
+        // Lowercasing one Unicode character can produce two code points.
+        assert_eq!(match_positions("İstanbul", "i\u{307}"), Some(vec![0]));
     }
 
     #[test]
@@ -90,7 +127,14 @@ mod tests {
             })
             .collect();
         let mut picker = Picker::new(branches, "fix".into());
-        assert_eq!(picker.filtered, vec![0, 2]);
+        assert_eq!(
+            picker
+                .filtered
+                .iter()
+                .map(|matched| matched.index)
+                .collect::<Vec<_>>(),
+            vec![0, 2]
+        );
         picker.move_selection(100);
         assert_eq!(picker.selected_branch().unwrap().name, "fix/a");
         picker.move_selection(-100);

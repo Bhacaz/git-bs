@@ -83,6 +83,7 @@ Cargo on the destination platform to build for another system.
 - Lists local branches, newest committer date first, with relative ages.
 - Marks the current branch with a green `*`.
 - Searches branch names while retaining their commit-date order.
+- Highlights the letters that match the search query in each branch name.
 - Shows a graph of the selected branch's last 15 commits.
 - Checks out the selected branch using Git's usual worktree protections.
 - Selecting the current branch prints an acknowledgment without running checkout.

@@ -66,8 +66,8 @@ fn run() -> io::Result<ExitCode> {
     }
     let mut picker = Picker::new(branches, query);
     if list {
-        for &index in &picker.filtered {
-            let branch = &picker.branches[index];
+        for matched in &picker.filtered {
+            let branch = &picker.branches[matched.index];
             println!(
                 "{} {:<50} ({})",
                 if branch.current { '*' } else { ' ' },

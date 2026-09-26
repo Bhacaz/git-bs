@@ -21,6 +21,7 @@ use unicode_width::UnicodeWidthStr;
 
 const BLUE: Color = Color::Rgb(102, 153, 204);
 const LABEL: Color = Color::Rgb(153, 204, 255);
+const MATCH: Color = Color::Yellow;
 
 struct TerminalGuard;
 
@@ -54,7 +55,10 @@ pub fn select(repo: &Repository, picker: &mut Picker) -> io::Result<bool> {
     let mut preview_branch = None;
     let mut preview = String::new();
     loop {
-        let selected = picker.filtered.get(picker.selected).copied();
+        let selected = picker
+            .filtered
+            .get(picker.selected)
+            .map(|matched| matched.index);
         if selected != preview_branch {
             preview = match picker.selected_branch() {
                 Some(branch) => repo
@@ -122,6 +126,29 @@ fn block(title: &str) -> Block<'_> {
         .title(Span::styled(title, Style::default().fg(LABEL)))
 }
 
+fn branch_name_spans<'a>(name: &'a str, positions: &[usize], normal: Style) -> Vec<Span<'a>> {
+    let matched = Style::default().fg(MATCH).add_modifier(Modifier::BOLD);
+    let mut spans = Vec::new();
+    let mut start = 0;
+    let mut in_match = positions.binary_search(&0).is_ok();
+    for (byte, _) in name.char_indices().skip(1) {
+        let next_match = positions.binary_search(&byte).is_ok();
+        if next_match != in_match {
+            spans.push(Span::styled(
+                &name[start..byte],
+                if in_match { matched } else { normal },
+            ));
+            start = byte;
+            in_match = next_match;
+        }
+    }
+    spans.push(Span::styled(
+        &name[start..],
+        if in_match { matched } else { normal },
+    ));
+    spans
+}
+
 fn draw(frame: &mut Frame, picker: &Picker, state: &mut ListState, preview: &str) {
     let area = frame.area();
     if area.width < 24 || area.height < 9 {
@@ -163,26 +190,27 @@ fn draw(frame: &mut Frame, picker: &Picker, state: &mut ListState, preview: &str
     let items: Vec<ListItem> = picker
         .filtered
         .iter()
-        .map(|&index| {
-            let branch = &picker.branches[index];
-            ListItem::new(Line::from(vec![
-                Span::styled(
-                    if branch.current { "* " } else { "  " },
-                    Style::default().fg(Color::Green),
-                ),
-                Span::styled(
-                    &branch.name,
-                    if branch.current {
-                        Style::default().fg(Color::Green)
-                    } else {
-                        Style::default()
-                    },
-                ),
-                Span::styled(
-                    format!("  ({})", branch.age),
-                    Style::default().fg(Color::DarkGray),
-                ),
-            ]))
+        .map(|branch_match| {
+            let branch = &picker.branches[branch_match.index];
+            let normal = if branch.current {
+                Style::default().fg(Color::Green)
+            } else {
+                Style::default()
+            };
+            let mut spans = vec![Span::styled(
+                if branch.current { "* " } else { "  " },
+                Style::default().fg(Color::Green),
+            )];
+            spans.extend(branch_name_spans(
+                &branch.name,
+                &branch_match.positions,
+                normal,
+            ));
+            spans.push(Span::styled(
+                format!("  ({})", branch.age),
+                Style::default().fg(Color::DarkGray),
+            ));
+            ListItem::new(Line::from(spans))
         })
         .collect();
     if items.is_empty() {
@@ -241,5 +269,68 @@ mod tests {
                 })
                 .unwrap();
         }
+    }
+
+    #[test]
+    fn highlights_only_matching_letters_in_selected_and_unselected_branches() {
+        let picker = Picker::new(
+            vec![
+                Branch {
+                    name: "feature/login".into(),
+                    age: "today".into(),
+                    current: true,
+                },
+                Branch {
+                    name: "fix/tooling".into(),
+                    age: "yesterday".into(),
+                    current: false,
+                },
+            ],
+            "ftlg".into(),
+        );
+        let mut terminal = Terminal::new(TestBackend::new(120, 20)).unwrap();
+        let mut state = ListState::default();
+        state.select(Some(0));
+        terminal
+            .draw(|frame| draw(frame, &picker, &mut state, ""))
+            .unwrap();
+        let highlighted: Vec<_> = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .filter(|cell| cell.fg == MATCH)
+            .collect();
+        let letters = highlighted
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<Vec<_>>()
+            .concat();
+        assert_eq!(letters, "ftlgftlg");
+        assert!(
+            highlighted
+                .iter()
+                .all(|cell| cell.modifier.contains(Modifier::BOLD))
+        );
+        assert!(
+            highlighted[..4]
+                .iter()
+                .all(|cell| cell.bg == Color::Rgb(32, 48, 64))
+        );
+        assert!(highlighted[4..].iter().all(|cell| cell.bg == Color::Reset));
+    }
+
+    #[test]
+    fn unicode_match_spans_slice_at_character_boundaries() {
+        let spans = branch_name_spans("éclair/été", &[0, 8], Style::default());
+        assert_eq!(
+            spans
+                .iter()
+                .map(|span| span.content.as_ref())
+                .collect::<Vec<_>>(),
+            vec!["é", "clair/", "é", "té"]
+        );
+        assert_eq!(spans[0].style.fg, Some(MATCH));
+        assert_eq!(spans[2].style.fg, Some(MATCH));
     }
 }
