@@ -5,6 +5,16 @@ based on [git-branch-select.sh](https://gist.github.com/Bhacaz/c00f7174918c00b5a
 The picker is built into the executable; **fzf and Bash are not required**.
 Git must be installed and available on `PATH`.
 
+## Install with Homebrew
+
+```sh
+brew install Bhacaz/tap/git-bs
+git bs
+```
+
+The formula builds the executable from the tagged Rust source. Homebrew installs
+Rust for the build and Git for runtime use. You do not need Rust after installing.
+
 ## Build and run
 
 Requires Rust 1.88 or newer to build. The compiled executable does not need Rust
@@ -15,8 +25,9 @@ cargo build --release --locked
 ./target/release/git-bs --help
 ```
 
-Run the executable from any directory inside a Git repository. The delivered
-Linux build is also available as `dist/git-bs`.
+Run the executable from any directory inside a Git repository. A Linux build
+made in this workspace is also available as `dist/git-bs`; it is not stored in
+the source repository. Tagged releases include a Linux x86-64 executable.
 
 To install from source:
 
@@ -102,4 +113,3 @@ The optional Python smoke test uses a real pseudo-terminal on Linux/macOS and
 temporary Git repositories to exercise typing, navigation, checkout,
 cancellation, terminal restoration, and refusal to overwrite dirty files.
 Python is not a runtime dependency of the application.
-
