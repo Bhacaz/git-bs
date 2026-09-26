@@ -13,11 +13,16 @@ git bs
 ```
 
 The formula downloads a compiled executable for macOS (Apple Silicon or Intel)
-or Linux (x86-64 or ARM64). It installs Git as needed, then sets the global Git
-alias `bs` to the executable in Homebrew's stable `opt` path. Git reads aliases
-on every invocation, so `git bs` works immediately without sourcing a shell
-configuration file. The install replaces any existing global `alias.bs` value.
-To remove that alias later, run `git config --global --unset alias.bs`.
+or Linux (x86-64 or ARM64). It installs Git as needed. Git discovers `git-bs`
+on `PATH`, so `git bs` works immediately without an alias or shell reload.
+Homebrew's install sandbox cannot edit your global Git configuration. If an
+older `bs` alias points elsewhere, replace it after installation:
+
+```sh
+git config --global alias.bs "!$(brew --prefix git-bs)/bin/git-bs"
+```
+
+Git reads the new alias on the next invocation; there is no shell file to source.
 
 ## Build and run
 
