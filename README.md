@@ -24,6 +24,22 @@ git config --global alias.bs "!$(brew --prefix git-bs)/bin/git-bs"
 
 Git reads the new alias on the next invocation; there is no shell file to source.
 
+## Install or update on Linux
+
+Copy and run this one line in a terminal:
+
+```sh
+bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/Bhacaz/git-bs/main/install.sh | bash'
+```
+
+The script chooses the latest Linux x86-64 or ARM64 release, checks its SHA-256
+checksum, and installs the binary in `~/.local/bin`. Run the same line again to
+update it. It sets your global Git `bs` alias to the installed executable, so
+`git bs` works right away even if `~/.local/bin` is not on your `PATH`. This
+replaces an existing global `bs` alias. Git reads the change immediately; no
+shell configuration needs to be sourced. Set `GIT_BS_INSTALL_DIR` before running
+the script if you want a different destination.
+
 ## Build and run
 
 Requires Rust 1.88 or newer to build. The compiled executable does not need Rust
@@ -117,6 +133,7 @@ cargo clippy --all-targets --locked -- -D warnings
 cargo test --locked
 cargo build --release --locked
 python3 tests/pty_smoke.py target/release/git-bs
+python3 tests/install_smoke.py
 ```
 
 The optional Python smoke test uses a real pseudo-terminal on Linux/macOS and
