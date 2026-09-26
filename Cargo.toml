@@ -1,0 +1,20 @@
+[package]
+name = "git-bs"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Interactive, searchable Git branch checkout without fzf"
+
+[dependencies]
+crossterm = "0.29"
+ratatui = { version = "0.30.2", default-features = false, features = ["crossterm_0_29"] }
+unicode-width = "0.2"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+
