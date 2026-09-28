@@ -92,7 +92,8 @@ Cargo on the destination platform to build for another system.
 - Marks the current branch with a green `*`.
 - Searches branch names while retaining their visit order.
 - Highlights the letters that match the search query in each branch name.
-- Shows a graph of the selected branch's last 15 commits.
+- Shows a colored graph of the selected branch's last 15 commits, with
+  highlighted commit hashes and branch/tag labels in the right preview panel.
 - Checks out the selected branch using Git's usual worktree protections.
 - Selecting the current branch prints an acknowledgment without running checkout.
 - Canceling makes no changes and exits successfully.

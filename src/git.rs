@@ -90,19 +90,15 @@ impl Repository {
         self.output(&[
             "--no-pager",
             "log",
-            "--oneline",
+            "--format=%C(auto)%h%d%C(reset) %s",
             "--graph",
-            "--color=never",
+            "--color=always",
+            "--decorate=short",
             "--no-show-signature",
             "-15",
             &format!("refs/heads/{}", branch.name),
             "--",
         ])
-        .map(|text| {
-            text.chars()
-                .filter(|c| !c.is_control() || *c == '\n')
-                .collect()
-        })
     }
 
     pub fn checkout(&self, branch: &Branch) -> io::Result<ExitStatus> {
@@ -257,6 +253,48 @@ mod tests {
         assert!(preview.contains("commit-19"));
         assert!(preview.contains("commit-05"));
         assert!(!preview.contains("commit-04"));
+    }
+
+    #[test]
+    fn preview_preserves_colored_merge_graph_and_decorations() {
+        use ansi_to_tui::IntoText;
+
+        let dir = TempDir::new().unwrap();
+        git(&dir, &["init", "-b", "main"]);
+        git(&dir, &["config", "user.name", "Test"]);
+        git(&dir, &["config", "user.email", "test@example.com"]);
+        git(&dir, &["config", "commit.gpgsign", "false"]);
+        git(&dir, &["config", "color.ui", "false"]);
+        git(&dir, &["config", "log.decorate", "false"]);
+        git(&dir, &["commit", "--allow-empty", "-m", "base"]);
+        git(&dir, &["checkout", "-b", "feature/été"]);
+        git(&dir, &["commit", "--allow-empty", "-m", "feature subject"]);
+        git(&dir, &["checkout", "main"]);
+        git(&dir, &["commit", "--allow-empty", "-m", "main subject"]);
+        git(
+            &dir,
+            &["merge", "--no-ff", "feature/été", "-m", "merge subject"],
+        );
+        let repo = Repository::new(dir.path().into());
+        let branches = repo.branches().unwrap();
+        let main = branches.iter().find(|branch| branch.current).unwrap();
+        let preview = repo.preview(main).unwrap();
+        assert!(preview.contains("\x1b["));
+        let text = preview.into_text().unwrap();
+        let plain = text.to_string();
+        assert!(plain.contains("|\\"));
+        assert!(plain.contains("|/"));
+        assert!(plain.contains("HEAD -> main"));
+        assert!(plain.contains("feature/été"));
+        assert!(plain.contains("feature subject"));
+        assert!(plain.contains("main subject"));
+        assert!(!plain.contains('\x1b'));
+        assert!(
+            text.lines
+                .iter()
+                .flat_map(|line| &line.spans)
+                .any(|span| { span.content.contains('|') && span.style.fg.is_some() })
+        );
     }
 
     #[test]

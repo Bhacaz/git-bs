@@ -1,4 +1,5 @@
 use crate::{git::Repository, picker::Picker};
+use ansi_to_tui::IntoText;
 use crossterm::{
     cursor::Show,
     event::{
@@ -13,7 +14,7 @@ use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Layout},
     style::{Color, Modifier, Style},
-    text::{Line, Span},
+    text::{Line, Span, Text},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
 };
 use std::io;
@@ -149,6 +150,20 @@ fn branch_name_spans<'a>(name: &'a str, positions: &[usize], normal: Style) -> V
     spans
 }
 
+fn preview_text(preview: &str) -> Text<'static> {
+    // Translate Git's ANSI colors into widget styles before rendering. Only
+    // printable text reaches the terminal; other control codes are discarded.
+    let mut text = preview
+        .into_text()
+        .unwrap_or_else(|_| Text::raw("Cannot display commit preview"));
+    for line in &mut text.lines {
+        for span in &mut line.spans {
+            span.content.to_mut().retain(|c| !c.is_control());
+        }
+    }
+    text
+}
+
 fn draw(frame: &mut Frame, picker: &Picker, state: &mut ListState, preview: &str) {
     let area = frame.area();
     if area.width < 24 || area.height < 9 {
@@ -233,9 +248,7 @@ fn draw(frame: &mut Frame, picker: &Picker, state: &mut ListState, preview: &str
         );
     }
     frame.render_widget(
-        Paragraph::new(preview)
-            .block(block(" Last 15 commits "))
-            .style(Style::default().fg(LABEL)),
+        Paragraph::new(preview_text(preview)).block(block(" Last 15 commits ")),
         columns[1],
     );
 }
@@ -245,6 +258,59 @@ mod tests {
     use super::*;
     use crate::git::Branch;
     use ratatui::backend::TestBackend;
+
+    #[test]
+    fn renders_git_graph_colors_and_resets_subject_style() {
+        let picker = Picker::new(Vec::new(), String::new());
+        let mut terminal = Terminal::new(TestBackend::new(180, 20)).unwrap();
+        terminal
+            .draw(|frame| {
+                draw(
+                    frame,
+                    &picker,
+                    &mut ListState::default(),
+                    "* \x1b[31m|\x1b[m \x1b[33mabc1234\x1b[m \x1b[1;32m(main)\x1b[m été\n\x1b[31m|/\x1b[m",
+                )
+            })
+            .unwrap();
+        let cells = terminal.backend().buffer().content();
+        assert!(
+            cells
+                .iter()
+                .any(|cell| cell.symbol() == "|" && cell.fg == Color::Red)
+        );
+        assert!(
+            cells
+                .iter()
+                .any(|cell| cell.symbol() == "/" && cell.fg == Color::Red)
+        );
+        assert!(
+            cells
+                .iter()
+                .any(|cell| cell.symbol() == "a" && cell.fg == Color::Yellow)
+        );
+        assert!(cells.iter().any(|cell| {
+            cell.symbol() == "m"
+                && cell.fg == Color::Green
+                && cell.modifier.contains(Modifier::BOLD)
+        }));
+        assert!(
+            cells
+                .iter()
+                .any(|cell| cell.symbol() == "é" && cell.fg == Color::Reset)
+        );
+        assert!(cells.iter().all(|cell| !cell.symbol().contains('\x1b')));
+    }
+
+    #[test]
+    fn preview_discards_terminal_controls() {
+        let text = preview_text("\x1b[31mred\x1b[m\x1b[2J\x1b]0;title\x07\t\x07 subject");
+        let visible = text.to_string();
+        assert!(visible.contains("red"));
+        assert!(visible.contains("subject"));
+        assert!(!visible.contains("title"));
+        assert!(!visible.chars().any(char::is_control));
+    }
 
     #[test]
     fn renders_wide_narrow_and_tiny_terminals_with_long_unicode_query() {

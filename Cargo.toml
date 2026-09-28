@@ -1,11 +1,12 @@
 [package]
 name = "git-bs"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2024"
 rust-version = "1.88"
 description = "Interactive, searchable Git branch checkout without fzf"
 
 [dependencies]
+ansi-to-tui = { version = "8.0.1", default-features = false }
 crossterm = "0.29"
 ratatui = { version = "0.30.2", default-features = false, features = ["crossterm_0_29"] }
 unicode-width = "0.2"
